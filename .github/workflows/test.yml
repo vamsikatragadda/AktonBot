@@ -1,0 +1,349 @@
+name: Test
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }} · Node ${{ matrix.node }} · DSH ${{ matrix.dsh }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, node: 24, dsh: 0.2.1-rc.2 }
+          - { os: windows-latest, node: 24, dsh: 0.2.1-rc.2 }
+          - { os: ubuntu-latest, node: 22, dsh: 0.2.1-rc.2 }
+          - { os: ubuntu-latest, node: 24, dsh: 0.2.0-rc.2 }
+    defaults:
+      run:
+        shell: bash
+        working-directory: akton-bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci --no-fund --no-audit
+      - name: Install DSH ${{ matrix.dsh }}
+        run: npm run harness -- --no-save "@deepseek-ai/dsh@${{ matrix.dsh }}"
+      - run: npm test
+      - run: node scripts/build-client.mjs --check
+      - run: npm run lint
+
+  scan:
+    name: Leak scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Scan exactly the tracked files, as they would be published.
+      - run: mkdir -p "$RUNNER_TEMP/tree" && git archive HEAD | tar -x -C "$RUNNER_TEMP/tree"
+      - run: node scripts/scan.mjs "$RUNNER_TEMP/tree"
+        env:
+          SCAN_EXTRA_PATTERNS: ${{ secrets.SCAN_EXTRA_PATTERNS }}
+
+  app:
+    name: Desktop app profile
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # The test composes the profile and starts no window, so it needs no Electron binary.
+      - run: npm ci --no-fund --no-audit
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm test
+
+  app-package:
+    name: Desktop app package (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-fund --no-audit
+      - run: npm run dist
+      - name: Check the packaged app
+        run: node scripts/check-packed.mjs
+      # The runner is a fresh machine, so the installer may run here. It must install for the
+      # current user only, the installed app must pass the same check, and the uninstaller must
+      # remove it again.
+      - name: Install and check
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Find-Entry($root) {
+            Get-ChildItem "$root\Software\Microsoft\Windows\CurrentVersion\Uninstall" |
+              Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -like 'AktonBot*' }
+          }
+          $installer = Get-Item dist-pack/AktonBot-*-win-x64.exe
+          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\AktonBot'
+          $exe = Join-Path $dir 'AktonBot.exe'
+          if (-not (Test-Path $exe)) { throw "The installer did not put the app in $dir" }
+          $entry = Find-Entry 'HKCU:'
+          if (-not $entry) { throw 'No uninstall entry for the current user' }
+          if (Find-Entry 'HKLM:') { throw 'The installer installed for all users' }
+          node scripts/check-packed.mjs $exe
+          if ($LASTEXITCODE -ne 0) { throw 'The installed app failed its check' }
+
+      # The update builds the app a second time, so it runs only for changes to the app or the
+      # workflows. A build of the next version is the feed; the installed app downloads it, checks
+      # its sha512, and installs it as it quits.
+      - name: Does the change touch the app?
+        id: scope
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] || git diff --name-only "origin/$GITHUB_BASE_REF...HEAD" | grep -qE '^(app/|\.github/workflows/)'; then
+            echo "update=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build the next version
+        if: steps.scope.outputs.update == 'true'
+        run: |
+          next="$(node -p "const [a, b, c] = require('./package.json').version.split(/[.-]/u); [a, b, Number(c) + 1].join('.')")"
+          echo "NEXT_VERSION=$next" >> "$GITHUB_ENV"
+          npx electron-builder --publish never -c.extraMetadata.version="$next" -c.directories.output=dist-next
+      - name: Update the installed app and check it
+        if: steps.scope.outputs.update == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\AktonBot\AktonBot.exe'
+          node scripts/check-update.mjs $exe dist-next
+          if ($LASTEXITCODE -ne 0) { throw 'The installed app did not take the update' }
+          # The installer goes on after the app has quit.
+          function Installed-Version {
+            Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
+              ForEach-Object { Get-ItemProperty $_.PSPath } |
+              Where-Object { $_.DisplayName -like 'AktonBot*' } |
+              Select-Object -ExpandProperty DisplayVersion
+          }
+          $deadline = (Get-Date).AddSeconds(240)
+          while ((Installed-Version) -ne $env:NEXT_VERSION -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 3 }
+          if ((Installed-Version) -ne $env:NEXT_VERSION) { throw "The installed version is $(Installed-Version), not $env:NEXT_VERSION" }
+          while ((Get-Process | Where-Object { $_.Path -like '*akton-bot-updater*' }) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+          node scripts/check-packed.mjs $exe
+          if ($LASTEXITCODE -ne 0) { throw 'The updated app failed its check' }
+
+      - name: Uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Find-Entry($root) {
+            Get-ChildItem "$root\Software\Microsoft\Windows\CurrentVersion\Uninstall" |
+              Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -like 'AktonBot*' }
+          }
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\AktonBot'
+          $exe = Join-Path $dir 'AktonBot.exe'
+          # The uninstaller removes the program only: the data location and the app's own data stay.
+          $kept = foreach ($folder in (Join-Path $HOME '.akton-bot'), (Join-Path $env:APPDATA 'AktonBot')) {
+            New-Item -ItemType Directory -Force $folder | Out-Null
+            $file = Join-Path $folder 'kept.txt'
+            Set-Content $file 'kept'
+            $file
+          }
+          $uninstaller = Join-Path $dir 'Uninstall AktonBot.exe'
+          Start-Process -FilePath $uninstaller -ArgumentList '/currentuser', '/S' -Wait
+          # The uninstaller goes on from a copy in the temp folder, so wait for its result.
+          $deadline = (Get-Date).AddSeconds(120)
+          while (((Test-Path $exe) -or (Find-Entry 'HKCU:')) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+          if (Test-Path $exe) { throw 'The uninstaller left the app in place' }
+          if (Find-Entry 'HKCU:') { throw 'The uninstaller left its uninstall entry' }
+          foreach ($file in $kept) { if (-not (Test-Path $file)) { throw "The uninstaller removed $file" } }
+
+  app-package-macos:
+    name: Desktop app package (macOS ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: macos-latest }
+          - { arch: x64, runner: macos-26-intel }
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-fund --no-audit
+      - run: npm run dist
+        env:
+          # Ad-hoc identity '-' uses no certificate or secret, so PR signing is safe; otherwise electron-builder skips signing and leaves an unsealed bundle.
+          CSC_FOR_PULL_REQUEST: 'true'
+      - name: Check the dmg and the zip
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          test -f "dist-pack/AktonBot-$version-mac-${{ matrix.arch }}.dmg"
+          test -f "dist-pack/AktonBot-$version-mac-${{ matrix.arch }}.zip"
+      - name: Check the packaged app
+        run: node scripts/check-packed.mjs
+      - name: Install from the dmg and check
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          dmg="dist-pack/AktonBot-$version-mac-${{ matrix.arch }}.dmg"
+          mnt="$(mktemp -d)/mnt"
+          mkdir -p "$mnt"
+          hdiutil attach "$dmg" -mountpoint "$mnt" -nobrowse -quiet
+          ditto "$mnt/AktonBot.app" /Applications/AktonBot.app
+          hdiutil detach "$mnt" -quiet
+          app="/Applications/AktonBot.app"
+          exe="$app/Contents/MacOS/AktonBot"
+          codesign --verify --deep --strict "$app"
+          file "$exe"
+          expected="${{ matrix.arch }}"
+          if [ "$expected" = x64 ]; then expected=x86_64; fi
+          file -b "$exe" | grep -F "$expected"
+          node scripts/check-packed.mjs "$exe"
+          node scripts/check-update.mjs "$exe" 99.0.0
+
+  app-package-linux:
+    name: Desktop app package (Linux x64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-fund --no-audit
+      - run: npm run dist
+      - name: Check the packages
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          test -f "dist-pack/AktonBot-$version-linux-x86_64.AppImage"
+          test -f "dist-pack/AktonBot-$version-linux-amd64.deb"
+          test -f dist-pack/latest-linux.yml
+      # An AppImage mounts through FUSE 2, and Ubuntu 24.04's AppArmor blocks the unprivileged
+      # user namespaces that Chromium's sandbox needs; a throwaway runner may lift that.
+      - name: Prepare to run the app
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libfuse2t64 xvfb
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Check the packaged app
+        run: xvfb-run -a node scripts/check-packed.mjs
+      # apt-get, not dpkg: it also installs the deb's dependencies. The ./ prefix makes apt-get
+      # read a file; without it the path is taken for a package name.
+      - name: Install the deb and check
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          sudo apt-get install -y "./dist-pack/AktonBot-$version-linux-amd64.deb"
+          test -f /usr/share/applications/akton-bot.desktop
+          xvfb-run -a node scripts/check-packed.mjs "/opt/AktonBot/akton-bot"
+      # A deb cannot update itself: it points at the release page, as on macOS.
+      - name: The deb's app hears of a new version
+        run: xvfb-run -a node scripts/check-update.mjs "/opt/AktonBot/akton-bot" 99.0.0
+      # The update builds the app a second time, so it runs only for changes to the app or the
+      # workflows. The AppImage downloads the new one and replaces itself as it quits.
+      - name: Does the change touch the app?
+        id: scope
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] || git diff --name-only "origin/$GITHUB_BASE_REF...HEAD" | grep -qE '^(app/|\.github/workflows/)'; then
+            echo "update=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build the next version
+        if: steps.scope.outputs.update == 'true'
+        run: |
+          next="$(node -p "const [a, b, c] = require('./package.json').version.split(/[.-]/u); [a, b, Number(c) + 1].join('.')")"
+          npx electron-builder --publish never -c.extraMetadata.version="$next" -c.directories.output=dist-next
+      - name: The AppImage takes the update
+        if: steps.scope.outputs.update == 'true'
+        run: |
+          tmp="$(mktemp -d)"
+          cp dist-pack/AktonBot-*-linux-x86_64.AppImage "$tmp/akton-bot.AppImage"
+          chmod +x "$tmp/akton-bot.AppImage"
+          xvfb-run -a node scripts/check-update.mjs "$tmp/akton-bot.AppImage" dist-next
+          pkill -f "$tmp/akton-bot" || true
+          next="$(ls dist-next/AktonBot-*-linux-x86_64.AppImage)"
+          test "$(sha512sum "$tmp/akton-bot.AppImage" | cut -d' ' -f1)" = "$(sha512sum "$next" | cut -d' ' -f1)"
+      - name: Uninstall
+        run: |
+          sudo apt-get remove -y akton-bot
+          test ! -e "/opt/AktonBot/akton-bot"
+
+  docker:
+    name: Docker startup and data migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [test, scan]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: docker compose -f docker-compose.yml config --quiet
+      - run: docker compose -f docker/compose.yml config --quiet
+      - run: docker build -f docker/Dockerfile -t akton-bot:test .
+      - run: node docker/test.mjs akton-bot:test
+      - name: Publish the tested image
+        if: github.event_name == 'push' && github.repository == 'vamsikatragadda/AktonBot'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_ACTOR: ${{ github.actor }}
+          GHCR_REPOSITORY: ${{ github.repository }}
+          GHCR_BRANCH: ${{ github.ref_name }}
+          GHCR_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GHCR_REPOSITORY,,}"
+          case "$GHCR_BRANCH" in
+            main) tag=latest ;;
+            dev) tag=dev ;;
+            *) exit 0 ;;
+          esac
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_ACTOR" --password-stdin
+          docker tag akton-bot:test "$image:sha-$GHCR_SHA"
+          docker tag akton-bot:test "$image:$tag"
+          docker push "$image:sha-$GHCR_SHA"
+          docker push "$image:$tag"
+
+  # The one check that branch rules require. A job whose needs failed is skipped,
+  # and GitHub counts a skipped required check as passed, so this job always runs
+  # and fails unless the matrix, leak scan, app, app package and Docker checks passed.
+  result:
+    name: Test result
+    needs: [test, scan, app, app-package, app-package-macos, app-package-linux, docker]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ needs.test.result }}" = success && test "${{ needs.scan.result }}" = success && test "${{ needs.app.result }}" = success && test "${{ needs.app-package.result }}" = success && test "${{ needs.app-package-macos.result }}" = success && test "${{ needs.app-package-linux.result }}" = success && test "${{ needs.docker.result }}" = success
