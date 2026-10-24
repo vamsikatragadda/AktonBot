@@ -10,28 +10,28 @@ const THEME_KEYS = ['bg', 'sidebar', 'bubble', 'card', 'text', 'user', 'userText
 const THEMES = {
   akton: {
     label: 'Akton',
-    light: { bg: '#fafafa', sidebar: '#f5f5f5', bubble: '#ececec', card: '#ffffff', text: '#0a0a0a', user: '#0a0a0a', userText: '#fafafa', accent: '#0a0a0a' },
-    dark: { bg: '#0a0a0a', sidebar: '#171717', bubble: '#262626', card: '#141414', text: '#f5f5f5', user: '#f5f5f5', userText: '#0a0a0a', accent: '#f5f5f5' },
+    light: { bg: '#ffffff', sidebar: '#f7f7f7', bubble: '#ececec', card: '#ffffff', text: '#0a0a0a', user: '#e9e9e9', userText: '#0a0a0a', accent: '#0a0a0a' },
+    dark: { bg: '#212121', sidebar: '#171717', bubble: '#2f2f2f', card: '#2f2f2f', text: '#f5f5f5', user: '#2f2f2f', userText: '#f5f5f5', accent: '#f5f5f5' },
   },
   ocean: {
     label: 'Ocean',
-    light: { bg: '#fcfcfc', sidebar: '#f7f7f7', bubble: '#eeeeee', card: '#ffffff', text: '#141414', user: '#070707', userText: '#fcfcfc', accent: '#4d6bfe' },
-    dark: { bg: '#141414', sidebar: '#1b1b1b', bubble: '#262626', card: '#1f1f1f', text: '#f2f2f2', user: '#f2f2f2', userText: '#141414', accent: '#5b7bff' },
+    light: { bg: '#ffffff', sidebar: '#f7f7f7', bubble: '#eeeeee', card: '#ffffff', text: '#141414', user: '#e9e9e9', userText: '#141414', accent: '#4d6bfe' },
+    dark: { bg: '#212121', sidebar: '#171717', bubble: '#2f2f2f', card: '#2f2f2f', text: '#f2f2f2', user: '#2f2f2f', userText: '#f2f2f2', accent: '#5b7bff' },
   },
   mono: {
     label: 'Mono',
-    light: { bg: '#ffffff', sidebar: '#f9f9f9', bubble: '#f0f0f0', card: '#ffffff', text: '#0d0d0d', user: '#0d0d0d', userText: '#ffffff', accent: '#0d0d0d' },
-    dark: { bg: '#0f0f0f', sidebar: '#171717', bubble: '#242424', card: '#1c1c1c', text: '#f4f4f4', user: '#f4f4f4', userText: '#0f0f0f', accent: '#f4f4f4' },
+    light: { bg: '#ffffff', sidebar: '#f9f9f9', bubble: '#f0f0f0', card: '#ffffff', text: '#0d0d0d', user: '#e9e9e9', userText: '#0d0d0d', accent: '#0d0d0d' },
+    dark: { bg: '#0f0f0f', sidebar: '#171717', bubble: '#242424', card: '#1c1c1c', text: '#f4f4f4', user: '#2f2f2f', userText: '#f4f4f4', accent: '#f4f4f4' },
   },
   paper: {
     label: 'Paper',
-    light: { bg: '#faf9f5', sidebar: '#f3f0e8', bubble: '#ebe7dc', card: '#ffffff', text: '#1f1e1b', user: '#2b2a26', userText: '#faf9f5', accent: '#d97757' },
-    dark: { bg: '#1f1e1b', sidebar: '#262521', bubble: '#34322d', card: '#2a2925', text: '#f3f0e8', user: '#f3f0e8', userText: '#1f1e1b', accent: '#e08a6d' },
+    light: { bg: '#faf9f5', sidebar: '#f3f0e8', bubble: '#ebe7dc', card: '#ffffff', text: '#1f1e1b', user: '#e9e9e9', userText: '#1f1e1b', accent: '#d97757' },
+    dark: { bg: '#1f1e1b', sidebar: '#262521', bubble: '#34322d', card: '#2a2925', text: '#f3f0e8', user: '#2f2f2f', userText: '#f3f0e8', accent: '#e08a6d' },
   },
   moonlight: {
     label: 'Moonlight',
-    light: { bg: '#f7f9fc', sidebar: '#eef2f8', bubble: '#e5ebf5', card: '#ffffff', text: '#121826', user: '#1e3a8a', userText: '#ffffff', accent: '#1e86ff' },
-    dark: { bg: '#0b1020', sidebar: '#10172a', bubble: '#1a2340', card: '#141c33', text: '#e8edf7', user: '#3b6fd8', userText: '#ffffff', accent: '#4f9dff' },
+    light: { bg: '#f7f9fc', sidebar: '#eef2f8', bubble: '#e5ebf5', card: '#ffffff', text: '#121826', user: '#e9e9e9', userText: '#121826', accent: '#1e86ff' },
+    dark: { bg: '#0b1020', sidebar: '#10172a', bubble: '#1a2340', card: '#141c33', text: '#e8edf7', user: '#2f2f2f', userText: '#e8edf7', accent: '#4f9dff' },
   },
 }
 // Text on the accent: near-black or white, whichever has the higher WCAG contrast.
@@ -127,7 +127,7 @@ export const allThemes = () => ({ ...THEMES, ...customThemes })
 // flat one.
 export const MESSAGE_WIDTH = { min: 50, max: 100, step: 5 }
 const percent = (value, initial) => (Number.isInteger(value) && value >= MESSAGE_WIDTH.min && value <= MESSAGE_WIDTH.max ? value : initial)
-export const layoutOf = prefs => (prefs?.layout === 'flat' ? 'flat' : 'bubble')
+export const layoutOf = prefs => (prefs?.layout === 'bubble' ? 'bubble' : 'flat')
 export const thinkingShown = prefs => prefs?.thinking === true
 export const widthOf = prefs => percent(prefs?.width, 80)
 export const flatWidthOf = prefs => percent(prefs?.flatWidth, 100)

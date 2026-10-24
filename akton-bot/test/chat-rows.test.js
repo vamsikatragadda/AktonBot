@@ -15,6 +15,7 @@ runInNewContext(bundle.outputFiles[0].text, {
   require: (name) => {
     const platform = {
       react: {
+        Fragment: 'Fragment',
         createElement: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }),
         useState: initial => [initial, () => {}], useRef: current => ({ current }),
         useLayoutEffect() {}, useEffect() {}, useMemo: make => make(),
@@ -28,7 +29,7 @@ runInNewContext(bundle.outputFiles[0].text, {
 })
 const { ChatRows, ThinkingRow } = module.exports
 
-const roster = { byId: { b: { id: 'b', name: 'Writer' } }, roomsById: {} }
+const roster = { byId: { b: { id: 'b', name: 'Writer' } }, roomsById: {}, prefs: { layout: 'bubble' } }
 const MINUTE = 60_000
 const shape = rows => [...rows].map(row => (row.props.className === 'bt-time-sep' ? 'clock' : row.type.name === 'Bubbles' ? `bot:${row.props.texts.join('+')}` : row.type.name))
 
@@ -66,6 +67,18 @@ test('with the clock, a time separator sits above the first entry and after each
     { kind: 'user', text: 'back', time: 75 * MINUTE },
   ]
   assert.deepEqual(shape(ChatRows({ items, sessionId: 'b', roster, actions: {}, clock: true })), ['PartLine', 'clock', 'EarlierUser', 'bot:one+two', 'clock', 'EarlierUser'])
+})
+
+test('in the flat layout a Bot block is headed by who speaks', () => {
+  const flat = { ...roster, prefs: { layout: 'flat' } }
+  const rows = [...ChatRows({ items: [{ kind: 'bot', text: 'one', time: MINUTE }], sessionId: 'b', roster: flat, actions: {} })]
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].type, 'Fragment')
+  const [speaker, bubbles] = rows[0].children
+  assert.equal(speaker.type.name, 'SpeakerHead')
+  assert.equal(speaker.props.bot.name, 'Writer')
+  assert.equal(bubbles.type.name, 'Bubbles')
+  assert.equal(bubbles.props.texts.join('+'), 'one')
 })
 
 test('a reasoning row the reader opened stays open when the turn moves it to a later step', () => {

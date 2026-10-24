@@ -434,6 +434,11 @@ function createWindow() {
     backgroundColor: mica ? '#00000000' : dark ? '#1b1b1c' : '#ffffff',
     // Frameless as in DSH Desktop: the caption buttons overlay the page's band. They keep the
     // sidebar's colors until the page sends the colors of the surface under them.
+    // On macOS the traffic lights float over the sidebar's top strip instead of a title bar.
+    ...(process.platform === 'darwin' ? {
+      titleBarStyle: 'hidden',
+      trafficLightPosition: { x: 16, y: 16 },
+    } : {}),
     ...(win32 ? {
       titleBarStyle: 'hidden',
       titleBarOverlay: { height: CAPTION_HEIGHT, color: dark ? '#1b1b1c' : '#f9fafb', symbolColor: dark ? '#f9fafb' : '#0f1115' },
@@ -441,7 +446,7 @@ function createWindow() {
     } : {}),
     webPreferences: {
       preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, webviewTag: true,
-      additionalArguments: [`--akton-bot-origin=${origin}`, ...(win32 ? [`--akton-bot-caption=${String(CAPTION_HEIGHT)}`, ...(mica ? ['--akton-bot-mica'] : [])] : [])],
+      additionalArguments: [`--akton-bot-origin=${origin}`, ...(process.platform === 'darwin' ? ['--akton-bot-frameless'] : []), ...(win32 ? [`--akton-bot-caption=${String(CAPTION_HEIGHT)}`, ...(mica ? ['--akton-bot-mica'] : [])] : [])],
     },
   })
   mainWindow.once('ready-to-show', () => { mainWindow?.show() })
@@ -450,7 +455,7 @@ function createWindow() {
   browserGuests.bind(mainWindow)
   const contents = mainWindow.webContents
   contents.session.on('will-download', downloadSaver({ window: mainWindow, dialog, downloads: app.getPath('downloads') }))
-  if (win32) {
+  if (win32 || process.platform === 'darwin') {
     // Fullscreen hides the caption buttons, and the page drops its band meanwhile. A reload
     // registers the page's listener again, so the state goes out after every load too.
     const sendFullscreen = () => { if (mainWindow !== undefined) contents.send(IPC.fullscreen, mainWindow.isFullScreen()) }

@@ -120,7 +120,7 @@ const adminNote = room => [
 ].filter(Boolean).join(' ')
 
 // The opening turn of a group the user just made without a first message.
-const roomKickoff = language => `The user just created this group and has not written yet. Greet the user in one short message and ask what they want this group to work on. Do not call members with @ yet, and do not reply [PASS]. No name prefix. Write in ${language ?? 'the user\'s language if known; otherwise English'}.`
+const roomKickoff = () => 'The user just created this group and has not written yet. Greet the user in one short message and ask what they want this group to work on. Do not call members with @ yet, and do not reply [PASS]. No name prefix. Write in English.'
 
 const ROOM_READ_MAX = 30
 
@@ -242,7 +242,7 @@ export function install(rt) {
     const after = round.slots.length - index - 1
     const members = `Members: the user${peers.length ? `, ${peers.join(', ')}` : ''} and you${leads ? ' (admin)' : ''}. Members speak one at a time; each message is posted before the next speaker starts. ${ROOM_CALLS}`
     const notice = room.notice ? `Group notice (shared instructions for every member):\n${room.notice}` : ''
-    if (round.kickoff) return { text: [members, notice, leads ? adminNote(room) : '', roomKickoff(rt.uiLanguage?.())].filter(Boolean).join('\n\n'), files: [] }
+    if (round.kickoff) return { text: [members, notice, leads ? adminNote(room) : '', roomKickoff()].filter(Boolean).join('\n\n'), files: [] }
     const working = workingIn(room).filter(item => item.bot.id !== member.id)
       .map(item => ({ ...item, unread: unreadCount(room, item.bot.id) }))
     const text = [

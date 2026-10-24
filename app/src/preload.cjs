@@ -16,14 +16,21 @@ if (host !== undefined && location.origin === host) {
     // alike; `forget` clears a key's storage, which here outlives the app.
     browser: browserBridge(),
   })
+  ipcRenderer.on('akton-bot:fullscreen', (_event, fullscreen) => {
+    const root = document.documentElement
+    if (root === null) return
+    if (fullscreen) root.dataset.fullscreen = 'true'
+    else delete root.dataset.fullscreen
+  })
+  // A frameless window (macOS traffic lights over the page): the page clears its
+  // own band under the lights. A preload runs before the document root exists.
+  if (process.argv.includes('--akton-bot-frameless')) {
+    const mark = () => { document.documentElement.dataset.aktonFrameless = 'true' }
+    if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', mark, { once: true })
+    else mark()
+  }
   const caption = process.argv.find(value => value.startsWith('--akton-bot-caption='))
   if (caption !== undefined) {
-    ipcRenderer.on('akton-bot:fullscreen', (_event, fullscreen) => {
-      const root = document.documentElement
-      if (root === null) return
-      if (fullscreen) root.dataset.fullscreen = 'true'
-      else delete root.dataset.fullscreen
-    })
     const start = () => { frameless(caption.slice('--akton-bot-caption='.length), process.argv.includes('--akton-bot-mica')) }
     // A preload runs before the document root exists.
     if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', start, { once: true })

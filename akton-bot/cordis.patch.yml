@@ -17,3 +17,15 @@
   config:
     searchProvider: auto
     fetchProvider: http
+
+# The team speaks for Akton, so the engine's own brand lines stay out of the
+# system prompt: no "powered by DeepSeek Harness" opener (personaPrefix is
+# restated from the web profile) and no harness-dev-context section about the
+# DeepSeek Harness checkout and Web GUI.
+- id: system-prompt
+  config:
+    includeHarnessIdentity: false
+    personaPrefix: >-
+      You are a coding agent powered by the {{model}} model.
+- id: harness-dev-context
+  disabled: true

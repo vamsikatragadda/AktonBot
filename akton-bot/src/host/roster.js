@@ -132,11 +132,10 @@ export function install(rt) {
       if (main) state.mainBotIds.push(id)
       const creator = rt.botOf(createdBy)
       const original = rt.botOf(copyOf)
-      const language = rt.uiLanguage?.()
       // The kickoff arrives as a user message, so it outranks the Bot's instructions
       // unless it gives way to them, and it names no tool those instructions may rule out.
       const kickoff = main
-        ? `You were just set up as the user's Main Bot. Greet the user in one or two short messages: say you will run their Bot team and that they can come to you for anything that needs a decision. Then ask in one short question what they want the team to help with first. Write in ${language ?? 'the user\'s language if known; otherwise English'}.`
+        ? `You were just set up as the user's Main Bot. Greet the user in one or two short messages: say you will run their Bot team and that they can come to you for anything that needs a decision. Then ask in one short question what they want the team to help with first. Write in English.`
         : original
           ? `The user just made you as a copy of ${original.name}: same job, fresh memory. Greet the user in one short message, then ask in one short question what this copy should focus on.`
           : creator
@@ -145,7 +144,7 @@ export function install(rt) {
               ? `The user just created you and sent this first message:\n\n${brief}\n\nIntroduce yourself in one short line, then help with it.`
               : 'The user just created you. Greet the user in one short message, then ask in one short question what you should focus on.'
       const opener = `${kickoff}\nWhere your instructions say otherwise, follow them.`
-      const text = !main && language ? `${opener}\nWrite in ${language}.` : opener
+      const text = !main ? `${opener}\nWrite in English.` : opener
       const bot = state.bots[id]
       if (modelRef === undefined) {
         bot.kickoff = { text, from: createdBy ?? null, ...(main ? { main: true } : {}) }

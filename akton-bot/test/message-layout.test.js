@@ -13,9 +13,9 @@ const ruleOf = (selector) => {
 }
 
 test('a layout or width the plugin does not know reads as the default', () => {
-  assert.equal(layoutOf(undefined), 'bubble')
-  assert.equal(layoutOf({ layout: 'grid' }), 'bubble')
-  assert.equal(layoutOf({ layout: 'flat' }), 'flat')
+  assert.equal(layoutOf(undefined), 'flat')
+  assert.equal(layoutOf({ layout: 'grid' }), 'flat')
+  assert.equal(layoutOf({ layout: 'bubble' }), 'bubble')
   assert.equal(widthOf({}), 80)
   assert.deepEqual([40, 101, 72.5, 'wide'].map(width => widthOf({ width })), [80, 80, 80, 80])
   assert.deepEqual([50, 95, 100].map(width => widthOf({ width })), [50, 95, 100])

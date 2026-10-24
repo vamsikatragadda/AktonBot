@@ -1,7 +1,7 @@
 {
   "name": "akton-bot",
   "productName": "AktonBot",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "AktonBot desktop app: the akton-bot team on its own pinned DeepSeek Harness.",
   "author": "Akton",

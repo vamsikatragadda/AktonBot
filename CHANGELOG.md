@@ -20,6 +20,21 @@ AktonBot started as a fork of [DeepSeek-Bot](https://github.com/Fei2411/DeepSeek
 - Renamed from DeepSeek-Bot to AktonBot: the Akton mark, the Akton theme and ink, the `akton-bot` plugin and profile names, and the `~/.akton-bot` data folder. Behavior is unchanged.
 - The DeepSeek theme and ink are now Ocean (saved choices migrate automatically), Bot greeting prompts default to English, and user-facing copy no longer names DeepSeek Harness. The engine and model options underneath are unchanged.
 
+## [0.2.2] - 2026-10-24
+
+### Added
+
+- **Seamless macOS window**: no title bar — the traffic lights float over the sidebar, and the cleared band drags the window.
+
+### Fixed
+
+- Bot prompts are now always English: greetings, team rules and memory entries no longer follow the browser's interface language, so a non-English locale can no longer make the Chief greet in Mandarin.
+
+### Changed
+
+- The engine's own brand lines ("powered by DeepSeek Harness", the harness-dev-context section) are patched out of the system prompt the Bots receive.
+- ChatGPT-style main UI: the flat message layout is now the default, your messages sit in gray bubbles instead of black, message type is larger with more air, the transcript and composer share an 800px centered column, and the sidebar buttons are flat icon buttons.
+
 ## [0.2.1] - 2026-10-23
 
 ### Added

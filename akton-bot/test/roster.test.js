@@ -135,6 +135,7 @@ for (const kind of ['main', 'copy', 'made by a Main Bot', 'made by the user']) {
   test(`the ${kind} kickoff asks in plain text and gives way to the Bot's instructions`, async (t) => {
     const { call, stop, sent, ctx } = start(undefined, { models: ['deepseek-v4-flash'] })
     t.after(stop)
+    // A Chinese browser locale must not leak into the prompts below.
     const chief = (await call('state', { locale: 'zh-CN' })).value.mainBotId
     const instructions = 'Use only plain text. Never call ask_user or ask_user_question.'
     let bot
@@ -160,7 +161,7 @@ for (const kind of ['main', 'copy', 'made by a Main Bot', 'made by the user']) {
     assert.doesNotMatch(text, /\b(?:ask_user(?:_question)?|allowCustom)\b/)
     assert.match(text, /ask in one short question/)
     assert.match(text, /Where your instructions say otherwise, follow them\./)
-    assert.match(text, /Write in Chinese \(简体中文\)\./)
+    assert.match(text, /Write in English\./)
     if (kind === 'copy') assert.match(text, /copy of Writer/)
     if (kind === 'made by a Main Bot') assert.match(text, /Why you exist: Review the team notes\./)
   })
